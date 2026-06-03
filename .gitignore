@@ -1,0 +1,33 @@
+# Secrets — NEVER commit
+.env
+.env.bak
+.env.local
+.env.*.local
+*.secret
+
+# Persistent runtime state (contains channel/user IDs + messages)
+bot.log
+processed_events.json
+
+# Platform-specific binaries (download fresh per machine)
+bin/
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code project state (per-machine)
+.claude/
