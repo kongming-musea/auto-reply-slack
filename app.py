@@ -41,6 +41,42 @@ MENTION_TAG = f"<@{KONG_MING_USER_ID}>"
 
 user_client = WebClient(token=USER_TOKEN)
 
+# Cache of Slack user_id -> human display name. Slack user IDs are opaque
+# (U0A1BFA2Y7J); feeding them raw into the model means it has no idea WHO it's
+# talking to, so it can't answer "who am I" and can't address people by name.
+# We resolve once via users.info and cache for the process lifetime (names
+# rarely change and a stale name is far cheaper than a per-message API call).
+_USER_NAME_CACHE: dict[str, str] = {}
+
+
+def resolve_user_name(user_id: str | None) -> str | None:
+    """Resolve a Slack user_id to a human display name, cached.
+
+    Prefers display_name, then real_name, then the raw handle. Returns None
+    for falsy input and falls back to the raw id if the lookup fails, so the
+    caller always gets *something* printable but can tell resolution worked
+    (a name) from when it didn't (the raw U… id).
+    """
+    if not user_id:
+        return None
+    if user_id in _USER_NAME_CACHE:
+        return _USER_NAME_CACHE[user_id]
+    try:
+        resp = user_client.users_info(user=user_id)
+        profile = resp["user"]["profile"]
+        name = (
+            profile.get("display_name")
+            or profile.get("real_name")
+            or resp["user"].get("real_name")
+            or resp["user"].get("name")
+            or user_id
+        )
+    except Exception as e:
+        log.warning("could not resolve user %s to a name: %s", user_id, e)
+        name = user_id
+    _USER_NAME_CACHE[user_id] = name
+    return name
+
 # In-memory dedup for the bolt-handler retry pass — Slack itself may resend the
 # same event up to 3 times within ~30 min if our HTTP response is slow/failed.
 # event_store.claim() is the durable equivalent (across restarts); this deque
@@ -113,6 +149,8 @@ def _fetch_thread_context(channel: str, thread_ts: str, limit: int = 20) -> list
         user = m.get("user", "unknown")
         if user == KONG_MING_USER_ID:
             user = "me"
+        else:
+            user = resolve_user_name(user) or user
         text = _strip_mentions(m.get("text", ""))
         if text:
             out.append({"user": user, "text": text})
@@ -212,7 +250,12 @@ def _process_trigger(event: dict, source: str = "webhook") -> None:
         else:
             context = []
 
-        reply, status = generate_reply(mention_text=clean_text, thread_context=context)
+        sender_name = resolve_user_name(sender)
+        reply, status = generate_reply(
+            mention_text=clean_text,
+            thread_context=context,
+            sender_name=sender_name,
+        )
 
         if status == STATUS_OK and reply:
             posted_via = "edit"

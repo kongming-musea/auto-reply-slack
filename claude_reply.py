@@ -69,6 +69,10 @@ You have access to Kong Ming's:
 
 Your job: use the available tools to look up the actual answer to the question, then reply concisely in first person as Kong Ming.
 
+Knowing who you're talking to and what they point at:
+- The prompt tells you the sender's name. If someone asks "who am I?", "do you know who's talking to you?", or similar, answer plainly with their name — never deflect or bounce the question back.
+- When a message references something contextually ("the above message", "this plan", "what we discussed", "send that"), resolve the exact referent FIRST: read the prior messages in this conversation (provided above) and any linked doc/thread before replying. Only if you genuinely cannot locate it, say specifically what you looked at and couldn't find — do not answer an adjacent topic or ask them to re-paste without trying.
+
 How to handle different kinds of messages:
 - Knowledge / lookup ("what sprint are we in?", "where's the design doc?", "what's the Scrum process here?") → search ClickUp / memory / skills and answer with real information. Cite the source briefly when useful (e.g. "per the sprint board…").
 - Process / methodology / Scrum / Agile questions → consult the scrum-master-agile-coach skill or relevant memory and answer substantively.
@@ -161,7 +165,9 @@ def _to_slack_mrkdwn(text: str) -> str:
 
 
 def generate_reply(
-    mention_text: str, thread_context: Optional[list[dict]] = None
+    mention_text: str,
+    thread_context: Optional[list[dict]] = None,
+    sender_name: Optional[str] = None,
 ) -> Tuple[str, str]:
     """Generate a reply by shelling out to `claude -p` from Kong Ming's home dir.
 
@@ -185,8 +191,17 @@ def generate_reply(
             + "\n\n"
         )
 
+    sender_block = ""
+    if sender_name:
+        sender_block = (
+            f"The person who just sent you this message is: {sender_name}. "
+            f"If they ask who they are or who you're talking to, answer with "
+            f"their name plainly; address them by name when it's natural.\n\n"
+        )
+
     user_prompt = (
         f"{context_block}"
+        f"{sender_block}"
         f"Message I was just sent / mentioned in:\n{mention_text}\n\n"
         f"Use any tools / connectors / memory needed to look up the answer, "
         f"then write the reply. Output only the reply text."
